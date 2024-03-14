@@ -1,0 +1,233 @@
+; initial KB
+(deffacts initial-knowledge-base
+
+    ; start of program
+    (s1)
+)
+
+; global variables
+(defglobal
+    ?*country_number* = 0
+    ?*country_colored* = 0
+)
+
+; read initial lists from user
+(defrule read_data
+
+    ; initial rule pattern
+    ?a <- (s1)
+    =>
+
+    ; get list of colors
+    (printout t "Read the color list: " crlf)
+    (assert (color-list (explode$ (readline))))
+
+    ; get list of countries
+    (printout t "Read the country list: " crlf)
+    (assert (country-list (explode$ (readline))))
+
+    ; delete start of program flag
+    (retract ?a)
+
+    ; start create-colors and create-countries from lists
+    (assert (s2))
+    (assert (s3))
+)
+
+; create color facts
+(defrule create-colors
+    ; condition to trigger this rule
+    ?a <- (s2)
+
+    ; match the color list
+    ?b <- (color-list $?colors)
+    => 
+    (if (eq (length$ $?colors) 0)
+        then
+
+        (retract ?a)
+
+        ; go next
+        (assert (s4))
+    else
+        ; get first color from list
+        (bind ?color (nth$ 1 $?colors))
+
+        ; create fact
+        (assert (color ?color))
+
+        ; create new list
+        (assert (color-list (delete$ $?colors 1 1)))
+    )
+    (retract ?b)
+)
+
+; create countries facts
+(defrule create-countries
+    ; condition to trigger this rule
+    ?a <- (s3)
+
+    ; match the country list
+    ?b <- (country-list $?countries)
+    => 
+    (if (eq (length$ $?countries) 0)
+        then
+
+        (retract ?a)
+
+        ; go next
+        (assert (s5))
+    else
+        ; get first country from list
+        (bind ?country (nth$ 1 $?countries))
+
+        (bind ?*country_number* (+ ?*country_number* 1))
+
+        ; create fact
+        (assert (country ?country))
+
+        ; create new list
+        (assert (country-list (delete$ $?countries 1 1)))
+    )
+    (retract ?b)
+)
+
+; clear variables
+(defrule clear-facts
+    ?a <- (s4)
+    ?b <- (s5)
+    =>
+    (retract ?a)
+    (retract ?b)
+    (assert (s6))
+)
+
+; for each country read its neighbours
+(defrule read-neighbours
+    (s6)
+    ?a <- (country ?country)
+    =>
+    ; read neighbour list
+    (printout t "Read the neighbours list for " ?country ": " crlf)
+    (assert (neighbour-list ?country (explode$ (readline))))
+    
+    ; add country
+    (assert (_country ?country))
+    (assert (__country ?country))
+
+    ; delete country
+    (retract ?a)
+)
+
+; check that all data was readed
+(defrule check-readed-all-neighbours
+    ; if no more country, then go next
+    ?a <- (s6)
+    (not (country ?))
+
+    =>
+    (retract ?a)
+    (assert (s7))
+)
+
+; create neighbours facts
+(defrule creat-neighbours
+    ?a <- (s7)
+
+    ; gey a neighbour list
+    ?b <- (neighbour-list ?country1 $?neighbours)
+    =>
+    (if (eq (length$ $?neighbours) 0)
+        then
+        ; nothing
+    else
+        ; get first country neighbour from list
+        (bind ?country2 (nth$ 1 $?neighbours))
+
+        ; create facts
+        (assert (neighbours ?country1 ?country2))
+
+        ; create new list
+        (assert (neighbour-list ?country1 (delete$ $?neighbours 1 1)))
+    )
+    ; delete old list
+    (retract ?b)
+)
+
+; go next step if neighbour data was processed
+(defrule check-processed-all-neighbours
+    ?a <- (s7)
+    ; no more neoghbour lists
+    (not (neighbour-list $?))
+    =>
+    (retract ?a)
+    (assert (s8))
+)
+
+; assign colors
+(defrule assign_color
+    (s8)
+
+    ; get a country
+    ?a <- (_country ?country)
+
+    ; get a color
+    (color ?color)
+
+    ; check country not colored
+    (not (colored ?country ?color))
+
+    ; check neighbours are not colored in this color
+    (forall
+        (neighbours ?country ?neighbour)
+        (not (colored ?neighbour ?color))
+    )
+    =>
+
+    ; delete country
+    (retract ?a)
+
+    ; color the country
+    (assert (colored ?country ?color))
+
+    ; count the colored country
+    (bind ?*country_colored* (+ ?*country_colored* 1))
+)
+
+; check that there is no solution
+(defrule check_no_solution
+    ?a <- (s8)
+
+    ; get acountry
+    (_country ?country1)
+
+    ; check there isn't a color we can color this country
+    (forall 
+        (color $color)
+        (exists
+            (country ?country2)
+            (neighbours ?country1 ?country2)
+        )
+    )
+    =>
+    (printout t "No solution!" crlf)
+    (retract ?a)
+)
+
+; check that there is a solution
+(defrule check_solution
+    ?a <- (s8)
+    (not (_country ?))    
+    =>
+    (retract ?a)
+    (assert (solution))
+)
+
+(defrule show_solution
+    (solution)
+    ?a <- (colored ?country ?color)
+    =>
+    (retract ?a)
+    (printout t "Country " ?country " was colored with " ?color crlf)
+)
+
